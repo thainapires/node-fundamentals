@@ -1,7 +1,8 @@
 import http from 'node:http'
 import { json } from './middlewares/json.js'
-import { Database } from './database.js'
-import { randomUUID } from 'node:crypto'
+import { routes } from './routes.js'
+import { extractQueryParams } from './utils/extract-query-params.js'
+
 /*
 GET, POST, PUT, PATCH, DELETE : Métodos que utilizaremos com mais frequência
 
@@ -19,36 +20,32 @@ Stateful terá sempre informação salva na memória*/
 
 //HTTP Status Code
 
-const database = new Database()
+/*
+Query Parameters: http://localhost:3333/users?userId=1&name=Diego (Parâmetros nomeados) - URL Stateful
+Route Parameters: https://localhost:333/users/1 (Parâmetros não nomeados) - Identificação de recurso
+Request Body: Envio de informações de um formulário (quantas informações quiser) (HTTPS)
+    POST http://localhost:3333/users 
+*/
 
 const server = http.createServer(async (req, res) => {
     const { method, url } = req
 
     await json(req, res)
 
-    if(method === 'GET' && url === '/users'){
+    const route = routes.find(route => {
+        return route.method === method && route.path.test(url)
+    })
 
-        const users = database.select('users')
+    if(route){
 
-        //Early return
-        return res   
-            .end(JSON.stringify(users))
-    }
+        const routeParams = req.url.match(route.path)
 
-    if(method === 'POST' && url === '/users'){
+        const { query, ...params } = routeParams.groups 
 
-        const { name, email } = req.body
+        req.params = params
+        req.query = query ? extractQueryParams(query) : {}
 
-        const user = {
-            id: randomUUID(),
-            name,
-            email,
-        }
-
-        database.insert('users', user)
-        
-        //Early return
-        return res.writeHead(201).end()
+        return route.handler(req, res)
     }
 
     return res.writeHead(404).end()
